@@ -1,24 +1,27 @@
 import { API_BASE_URL, DEFAULT_API_KEY } from "@/utils/config";
-import { ChatResponse, UploadSummary, ChatParams, UploadParams} from "@/types/api";
+import type { ChatParams, ChatResponse, UploadParams, UploadSummary } from "@/types/api";
 export async function uploadDocuments({ tenantId, files, apiKey }: UploadParams): Promise<UploadSummary> {
-    if (!files || files.length === 0) throw new Error("Please select at least one document.")
+    const normalizedFiles = Array.isArray(files) ? files : Array.from(files ?? []);
+    if (!normalizedFiles.length) throw new Error("Please select at least one document.");
     const formData = new FormData();
-    Array.from(files).forEach((file) => formData.append("files", file))
-    const response = await fetch(`${API_BASE_URL}/upload/documents?tenant_id=${encodeURIComponent(tenantId)}`,
+    normalizedFiles.forEach((file) => formData.append("files", file));
+    const response = await fetch(
+        `${API_BASE_URL}/upload/documents?tenant_id=${encodeURIComponent(tenantId)}`,
         {
             method: "POST",
             headers: {
-                "x-api-key": apiKey ?? DEFAULT_API_KEY
+                "x-api-key": apiKey ?? DEFAULT_API_KEY,
             },
-            body: formData
-        });
+            body: formData,
+        },
+    );
     if (!response.ok) {
         const details = await response.json().catch(() => ({}));
         throw new Error(details?.detail ?? "Unable to upload documents.");
     }
     return (await response.json()) as UploadSummary;
 }
-export async function askQuestion({tenantId, message, apiKey, conversationId }: ChatParams): Promise<ChatResponse> {
+export async function askQuestion({ tenantId, message, apiKey, conversationId }: ChatParams): Promise<ChatResponse> {
     const response = await fetch(`${API_BASE_URL}/chat/ask`, {
         method: "POST",
         headers: {

@@ -1,31 +1,47 @@
 "use client";
-import type { FormEvent } from "react";
-import { useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ArrowUpRight, Files, Shield, Sparkles, UploadCloud } from "lucide-react";
+import { useDropzone } from "react-dropzone";
 import { StatusCard } from "@/components/status-card";
 import { ChatBubble } from "@/components/chat-bubble";
+import { TenantSelector } from "@/components/tenant-selector";
 import { askQuestion, uploadDocuments } from "@/services/api";
-import type { Message, UploadSummary } from "@/types/api";
-import { DEFAULT_API_KEY } from "@/utils/config";
+import type { Message } from "@/types/api";
+import { useChatStore } from "@/store/chat-store";
 export default function Home() {
-    const [tenantId, setTenantId] = useState("tenant-alpha");
-    const [apiKey, setApiKey] = useState(DEFAULT_API_KEY);
+    const { tenantId, apiKey, messages, uploading, isSending, uploadSummary, addMessage, setConversationId, conversationId, setUploadSummary, setUploading, setIsSending, clearMessages } = useChatStore();
     const [files, setFiles] = useState<File[]>([]);
-    const [uploading, setUploading] = useState(false);
-    const [uploadResult, setUploadResult] = useState<UploadSummary | null>(null);
-    const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
-    const [conversationId, setConversationId] = useState<string | null>(null);
-    const [isSending, setIsSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const totalDocuments = uploadResult?.documents.length ?? 0;
-    const totalChunks = uploadResult?.total_chunks ?? 0;
-    const heroSubhead = useMemo(() => `${tenantId.toUpperCase()} · ${uploadResult ? `${totalChunks} chunks synced` : "Awaiting knowledge ingestion"}`, [tenantId, uploadResult, totalChunks]);
-    function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-        const fileList = event.target.files;
-        if (!fileList) return;
-        setFiles(Array.from(fileList));
+    const chatViewportRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (chatViewportRef.current) {
+            chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
+        }
+    }, [messages]);
+
+    function handleResetConversation() {
+        clearMessages();
+        setConversationId(null);
+        setInput("");
+        setError(null);
     }
+    const totalDocuments = uploadSummary?.documents.length ?? 0;
+    const totalChunks = uploadSummary?.total_chunks ?? 0;
+    const heroSubhead = useMemo(() => `${tenantId.toUpperCase()} · ${uploadSummary ? `${totalChunks} chunks synced` : "Awaiting knowledge ingestion"}`, [tenantId, uploadSummary, totalChunks]);
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+        accept: {
+            "application/pdf": [".pdf"],
+            "text/plain": [".txt"],
+            "text/markdown": [".md"],
+            "application/msword": [".doc"],
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"],
+        },
+        onDrop: (acceptedFiles: File[]) => {
+            setFiles(acceptedFiles);
+            setError(null);
+        },
+    });
     async function handleUpload(event: FormEvent) {
         event.preventDefault();
         if (!files.length) {
@@ -35,8 +51,8 @@ export default function Home() {
         setUploading(true);
         setError(null);
         try {
-            const summary = await uploadDocuments({tenantId, files, apiKey });
-            setUploadResult(summary);
+            const summary = await uploadDocuments({ tenantId, files, apiKey });
+            setUploadSummary(summary);
             setFiles([]);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Upload failed.");
@@ -48,7 +64,7 @@ export default function Home() {
         event.preventDefault();
         if (!input.trim()) return;
         const userMessage: Message = { id: crypto.randomUUID(), role: "user", content: input.trim() };
-        setMessages((prev) => [...prev, userMessage]);
+        addMessage(userMessage);
         setInput("");
         setIsSending(true);
         setError(null);
@@ -67,7 +83,7 @@ export default function Home() {
                 citations: response.citations,
                 latencyMs: response.latency_ms,
             };
-            setMessages((prev) => [...prev, assistantMessage]);
+            addMessage(assistantMessage);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Unable to fetch answer.");
         } finally {
@@ -107,7 +123,12 @@ export default function Home() {
                                     <p className="text-sm uppercase tracking-[0.3em] text-white/60">Knowledge Dialogue</p>
                                     <h2 className="text-2xl font-semibold">Tenant Chat Stream</h2>
                                 </div>
-                                <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/70">{messages.length} turns</span>
+                                <div className="flex items-center gap-2">
+                                    <button type="button" onClick={handleResetConversation} className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/70 transition hover:border-white">
+                                        Reset
+                                    </button>
+                                    <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/70">{messages.length} turns</span>
+                                </div>
                             </div>
                             <div className="mt-5 flex h-[420px] flex-col gap-4 overflow-y-auto pr-2">
                                 {messages.length === 0 ? (
@@ -130,7 +151,7 @@ export default function Home() {
                                     <textarea className="w-full resize-none bg-transparent text-base outline-none placeholder:text-white/40" rows={3} value={input} onChange={(event) => setInput(event.target.value)} placeholder="Ask about incident response, compliance workflows, or internal Q&A..." />
                                 </div>
                                 <div className="flex items-center justify-between gap-3 text-sm text-white/60">
-                                    <span>Responses powered by OpenAI + Pinecone. Streaming disabled in demo mode. </span>
+                                    <span>Responses powered by OpenAI + Pinecone. Streaming disabled in demo mode.</span>
                                     <button type="submit" disabled={isSending} className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-500 to-violet-500 px-5 py-2 font-semibold text-white shadow-lg shadow-violet-500/40 transition hover:from-sky-400 hover:to-violet-400 disabled:cursor-not-allowed disabled:opacity-50">Send prompt
                                         <ArrowUpRight className="h-4 w-4" />
                                     </button>
@@ -148,27 +169,9 @@ export default function Home() {
                             <StatusCard icon={Files} label="Documents Ingested" value={totalDocuments.toString().padStart(2, "0")} hint="Per-tenant Pinecone namespaces" accent="emerald" />
                             <StatusCard icon={Activity} label="Latency (p95)" value={messages.length ? "~280 ms" : "—"} hint="FastAPI + OpenAI completions" accent="sky" />
                             <StatusCard icon={Shield} label="Isolation" value="Namespace keys" hint="Tenant aware API key" accent="violet" />
-                            <StatusCard icon={Sparkles} label="Citations" value={ messages.some((m) => m.citations?.length) ? "Active" : "None yet" } hint="Inline references per chunk" accent="amber" />
+                            <StatusCard icon={Sparkles} label="Citations" value={messages.some((m) => m.citations?.length) ? "Active" : "None yet"} hint="Inline references per chunk" accent="amber" />
                         </div>
-                        <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm uppercase tracking-[0.3em] text-white/60">Tenant settings</p>
-                                    <h3 className="text-xl font-semibold">Connection Controls</h3>
-                                </div>
-                                <div className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/60">
-                                    Secure header
-                                </div>
-                            </div>
-                            <label className="space-y-2 text-sm text-white/70">
-                                Tenant Identifier
-                                <input className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-white outline-none focus:border-sky-400" value={tenantId} onChange={(event) => setTenantId(event.target.value)} />
-                            </label>
-                            <label className="space-y-2 text-sm text-white/70">
-                                X-API-Key
-                                <input type="password" className="w-full rounded-xl border border-white/15 bg-black/20 px-4 py-3 text-white outline-none placeholder:text-white/40 focus:border-sky-400" value={apiKey} placeholder="Optional if backend auth disabled" onChange={(event) => setApiKey(event.target.value)} />
-                            </label>
-                        </div>
+                        <TenantSelector />
                         <form onSubmit={handleUpload} className="space-y-4 rounded-3xl border border-dashed border-white/20 bg-gradient-to-b from-white/10 to-white/5 p-6">
                             <div className="flex items-center gap-3">
                                 <div className="rounded-2xl bg-white/10 p-3">
@@ -179,25 +182,32 @@ export default function Home() {
                                     <h3 className="text-xl font-semibold">Upload PDFs & docs</h3>
                                 </div>
                             </div>
-                            <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-white/20 bg-black/20 px-4 py-10 text-center text-white/70 transition hover:border-sky-400">
-                                <input type="file" accept=".pdf,.txt,.md,.doc,.docx" multiple className="hidden" onChange={handleFileChange} />
-                                <p className="text-base font-semibold">Drop files or click to browse</p>
-                                <p className="text-sm text-white/50">Supports PDF, Markdown, plain text, DOCX </p>
+                            <div
+                                {...getRootProps({
+                                    className: `flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed px-4 py-10 text-center transition ${isDragActive
+                                        ? "border-sky-400 bg-sky-400/10 text-white"
+                                        : "border-white/20 bg-black/20 text-white/70 hover:border-sky-400"
+                                    }`,
+                                })} >
+                                <input {...getInputProps()} />
+                                <p className="text-base font-semibold">
+                                    {isDragActive ? "Release to upload" : "Drop files or click to browse"}
+                                </p>
+                                <p className="text-sm text-white/50">Supports PDF, Markdown, plain text, DOCX</p>
                                 {files.length ? (
                                     <p className="mt-2 rounded-full bg-white/10 px-3 py-1 text-xs text-white">
                                         {files.length} file(s) selected
                                     </p>
                                 ) : null}
-                            </label>
+                            </div>
                             <button type="submit" disabled={uploading} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white text-black py-3 font-semibold transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50">Ingest to Pinecone
                                 <ArrowUpRight className="h-4 w-4" />
                             </button>
-                            {uploadResult ? (
+                            {uploadSummary ? (
                                 <div className="rounded-2xl border border-white/15 bg-white/5 p-4 text-sm text-white/80">
                                     <p className="font-semibold">Latest sync</p>
                                     <p className="text-white">
-                                        {uploadResult.documents.length} docs →{" "}
-                                        {uploadResult.total_chunks} chunks
+                                        {uploadSummary.documents.length} docs → {uploadSummary.total_chunks} chunks
                                     </p>
                                 </div>
                             ) : null}

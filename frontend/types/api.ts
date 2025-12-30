@@ -48,6 +48,7 @@ export type ChatCardProps = {
     content: string;
     citations?: Citation[];
     latencyMs?: number;
+    footnotePrefix?: string;
 };
 export type StatusCardProps = {
     icon: LucideIcon;
@@ -55,4 +56,21 @@ export type StatusCardProps = {
     value: string;
     hint?: string;
     accent?: "emerald" | "sky" | "violet" | "amber";
+};
+export type ChatState = {
+    tenantId: string;
+    apiKey: string;
+    messages: Message[];
+    conversationId: string | null;
+    uploadSummary: UploadSummary | null;
+    uploading: boolean;
+    isSending: boolean;
+    setTenantId: (tenantId: string) => void;
+    setApiKey: (apiKey: string) => void;
+    addMessage: (message: Message) => void;
+    clearMessages: () => void;
+    setConversationId: (id: string | null) => void;
+    setUploadSummary: (summary: UploadSummary | null) => void;
+    setUploading: (value: boolean) => void;
+    setIsSending: (value: boolean) => void;
 };
