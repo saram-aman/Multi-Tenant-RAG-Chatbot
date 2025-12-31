@@ -12,11 +12,7 @@ def test_chat_endpoint_returns_response(client):
 
     with patch("app.api.chat.get_rag_service", return_value=MagicMock(answer_question=lambda _: mock_response)):
         payload = {"tenant_id": "tenant-123", "message": "What is the policy?"}
-        response = client.post(
-            "/api/chat/ask",
-            json=payload,
-            headers={"x-api-key": "test-api-key"},
-        )
+        response = client.post("/api/chat/ask", json=payload, headers={"x-api-key": "test-api-key"})
 
     assert response.status_code == 200
     body = response.json()

@@ -6,11 +6,7 @@ def test_upload_documents_success(client):
     files = {"files": ("test.txt", file_content, "text/plain")}
 
     with patch("app.ingestion.pipeline.ingest_document", return_value=3):
-        response = client.post(
-            "/api/upload/documents?tenant_id=tenant-123",
-            files=files,
-            headers={"x-api-key": "test-api-key"},
-        )
+        response = client.post("/api/upload/documents?tenant_id=tenant-123", files=files, headers={"x-api-key": "test-api-key"})
 
     assert response.status_code == 200
     payload = response.json()
